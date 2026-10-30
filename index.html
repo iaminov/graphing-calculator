@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Graphing Calculator Online</title>
+    <meta name="description" content="Standalone client-side graphing calculator with enhanced keyboard shortcuts, single-character Backspace, and hardware-level undo/redo.">
+    <meta name="theme-color" content="#ffffff">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="calc.png"/>
+    <link rel="stylesheet" type="text/css" href="assets/tn.css"/>
+
+    <style>
+      html {
+        overflow-x: hidden;
+      }
+      body {
+        padding: 0px !important;
+        display: flex !important;
+        flex-direction: column;
+        margin: 0;
+        background: #ffffff;
+        overflow-x: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .calculatorDiv {
+        outline: none !important;
+        width: 309.6px;
+        height: 724.8px;
+        margin-left: auto;
+        margin-right: auto;
+        transform-origin: top center;
+        transition: transform 0.2s ease;
+      }
+      #displayDiv {
+        transition: opacity 0.15s ease-out;
+      }
+      body.calc-booting #displayDiv,
+      body.calc-booting #display,
+      body.calc-booting canvas {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      #main_div {
+        padding: 4px;
+        max-width: 300px;
+        margin-left: auto;
+        margin-right: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #zoom_controls {
+        display: flex !important;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        margin: 8px auto 2px;
+        z-index: 1000;
+        position: relative;
+      }
+      #zoom_controls button {
+        padding: 6px 13px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        background-color: #f4f4f6;
+        color: #222;
+        transition: background-color 0.15s, opacity 0.15s;
+      }
+      #zoom_controls button:hover:not(:disabled) {
+        background-color: #e4e4e9;
+      }
+      #zoom_controls button:active:not(:disabled) {
+        background-color: #d4d4dc;
+      }
+      #zoom_controls button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      #zoom_level {
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        font-weight: bold;
+        min-width: 48px;
+        justify-content: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .controls-divider {
+        width: 1px;
+        height: 22px;
+        background: #d8d8de;
+        margin: 0 4px;
+      }
+      #shortcut_hint {
+        text-align: center;
+        font-size: 12px;
+        color: #666;
+        margin: 0 auto 10px;
+        padding: 0 10px;
+      }
+      #shortcut_hint kbd {
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-family: monospace;
+        font-size: 11px;
+        color: #111;
+      }
+      #status_toast {
+        font-size: 12px;
+        font-weight: 600;
+        color: #1d4ed8;
+        min-width: 60px;
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      #status_toast.visible {
+        opacity: 1;
+      }
+
+      /* ROM Upload Overlay Modal */
+      .rom-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(5px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 16px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      .rom-modal-backdrop.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .rom-modal-card {
+        background: #ffffff;
+        border-radius: 14px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        max-width: 460px;
+        width: 100%;
+        padding: 28px;
+        text-align: center;
+        box-sizing: border-box;
+      }
+      .rom-modal-card h2 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+      .rom-modal-card p.rom-desc {
+        font-size: 13.5px;
+        color: #475569;
+        line-height: 1.5;
+        margin: 0 0 18px;
+      }
+      .drop-zone {
+        border: 2px dashed #94a3b8;
+        border-radius: 10px;
+        padding: 24px 16px;
+        background: #f8fafc;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .drop-zone:hover, .drop-zone.dragover {
+        border-color: #2563eb;
+        background: #eff6ff;
+      }
+      .drop-zone .drop-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+      }
+      .drop-zone .drop-sub {
+        font-size: 12px;
+        color: #64748b;
+      }
+      .rom-info {
+        margin-top: 16px;
+        font-size: 11.5px;
+        color: #64748b;
+        line-height: 1.45;
+        background: #f1f5f9;
+        padding: 10px 12px;
+        border-radius: 6px;
+        text-align: left;
+      }
+      .rom-close-btn {
+        margin-top: 14px;
+        background: none;
+        border: none;
+        color: #64748b;
+        font-size: 12.5px;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+    </style>
+
+    <script src="assets/ELG-min.js"></script>
+    <script id="calc_rom" type="application/json" data-url="assets/No_AppsCE.h84statej"></script>
+    <script id="calc_faceplate" type="application/json" data-url="assets/faceplate.svg"></script>
+  </head>
+  <body class="calc-booting">
+    <div id="zoom_controls">
+      <button onclick="zoomOut()" title="Zoom Out">-</button>
+      <span id="zoom_level" onclick="resetZoom()" title="Click to reset to 100%">100%</span>
+      <button onclick="zoomIn()" title="Zoom In">+</button>
+      <div class="controls-divider"></div>
+      <button id="undo_btn" onclick="performUndo()" disabled title="Undo last action (Ctrl+Z)">↶ Undo (Ctrl+Z)</button>
+      <button id="redo_btn" onclick="performRedo()" disabled title="Redo action (Ctrl+Y)">↷ Redo</button>
+      <div class="controls-divider"></div>
+      <button id="rom_btn" onclick="promptRomUpload()" title="Load or change calculator ROM file">📁 Load ROM</button>
+      <span id="status_toast"></span>
+    </div>
+    <div id="shortcut_hint">
+      Shortcuts: <kbd>{</kbd> <kbd>}</kbd> curly braces · <kbd>[</kbd> <kbd>]</kbd> brackets · <kbd>Backspace</kbd> delete last char · <kbd>Ctrl+Z</kbd> undo · <kbd>Esc</kbd> clear line
+    </div>
+    <div id="calculatorDiv"></div>
+    <div id="main_div"></div>
+
+    <!-- ROM Upload Modal -->
+    <div id="rom_modal" class="rom-modal-backdrop">
+      <div class="rom-modal-card">
+        <div style="font-size: 32px; margin-bottom: 8px;">📟</div>
+        <h2>Graphing Calculator</h2>
+        <p class="rom-desc">
+          To run the calculator, please supply your calculator OS state / ROM file (<code>.h84statej</code> or <code>.rom</code>).
+        </p>
+        <div id="drop_zone" class="drop-zone" onclick="document.getElementById('rom_file_input').click()">
+          <input type="file" id="rom_file_input" accept=".h84statej,.h84state,.rom,.json" style="display:none">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span class="drop-title">Click to select ROM file</span>
+          <span class="drop-sub">or drag and drop here</span>
+        </div>
+        <div class="rom-info">
+          🔒 <strong>Saved Locally:</strong> Your ROM file is saved only inside your browser's private local database (IndexedDB). It is never sent to any server, and you will not have to upload it again when revisiting this site.
+        </div>
+        <button class="rom-close-btn" onclick="hideRomModal()" id="rom_cancel_btn" style="display:none;">Dismiss</button>
+      </div>
+    </div>
+
+    <script>
+      const from_id = (id) => document.getElementById(id);
+      const calc_rom = from_id("calc_rom");
+      const calc_faceplate = from_id("calc_faceplate");
+      const calc_div = from_id("calculatorDiv");
+      const main_div = from_id("main_div");
+      const zoom_level_display = from_id("zoom_level");
+      const undo_btn = from_id("undo_btn");
+      const redo_btn = from_id("redo_btn");
+      const status_toast = from_id("status_toast");
+
+      let calc = null;
+      const MAX_UNDO_STEPS = 50;
+      const undoStack = [];
+      const redoStack = [];
+      let isRunningMacro = false;
+      let toastTimeout = null;
+
+      function showToast(msg) {
+        if (!status_toast) return;
+        status_toast.textContent = msg;
+        status_toast.classList.add("visible");
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          status_toast.classList.remove("visible");
+        }, 1500);
+      }
+
+      function updateUndoButtons() {
+        if (undo_btn) {
+          undo_btn.disabled = undoStack.length === 0;
+          undo_btn.textContent = undoStack.length > 0
+            ? `↶ Undo (${undoStack.length})`
+            : "↶ Undo (Ctrl+Z)";
+        }
+        if (redo_btn) {
+          redo_btn.disabled = redoStack.length === 0;
+        }
+      }
+
+      // Zoom control: 100% zoom is natively sized to the old 120% pixel dimensions (309.6px × 724.8px)
+      const ZOOM_STORAGE_KEY = 'calc_zoom_level_v3';
+      const zoomStep = 0.1;
+      const minZoom = 0.5;
+      const maxZoom = 2.5;
+      
+      let currentZoom = parseFloat(localStorage.getItem(ZOOM_STORAGE_KEY)) || 1.0;
+      currentZoom = Math.max(minZoom, Math.min(maxZoom, currentZoom));
+
+      function updateZoom() {
+        calc_div.style.transform = `scale(${currentZoom})`;
+        zoom_level_display.textContent = `${Math.round(currentZoom * 100)}%`;
+        
+        const extraSpace = calc_div.offsetHeight * (currentZoom - 1);
+        calc_div.style.marginBottom = `${Math.max(0, extraSpace)}px`;
+        
+        localStorage.setItem(ZOOM_STORAGE_KEY, currentZoom.toString());
+        
+        if (window.parent !== window) {
+          const totalHeight = calc_div.offsetHeight * currentZoom + 180;
+          window.parent.postMessage({
+            type: 'updateHeight',
+            height: totalHeight
+          }, '*');
+        }
+      }
+
+      function zoomIn() {
+        if (currentZoom < maxZoom) {
+          currentZoom = Math.min(Math.round((currentZoom + zoomStep) * 10) / 10, maxZoom);
+          updateZoom();
+        }
+        focusCalculator();
+      }
+
+      function zoomOut() {
+        if (currentZoom > minZoom) {
+          currentZoom = Math.max(Math.round((currentZoom - zoomStep) * 10) / 10, minZoom);
+          updateZoom();
+        }
+        focusCalculator();
+      }
+
+      function resetZoom() {
+        currentZoom = 1.0;
+        updateZoom();
+        focusCalculator();
+      }
+
+      function focusCalculator() {
+        if (calc_div) {
+          calc_div.focus({ preventScroll: true });
+        }
+      }
+
+      // Proxy XMLHttpRequest.open to strip URL hash for ROM/SVG extensions
+      XMLHttpRequest.prototype.open = new Proxy(XMLHttpRequest.prototype.open, {
+        apply: function (target, thisArg, args) {
+          if (typeof args[1] === "string") {
+            args[1] = args[1].replace(/#.*$/, "");
+          }
+          Reflect.apply(target, thisArg, args);
+        },
+      });
+
+      function create_blob(string) {
+        if (!string) return null;
+        let blob = new Blob([JSON.parse(string)]);
+        return URL.createObjectURL(blob);
+      }
+
+      // IndexedDB Storage for persistent local ROM
+      const DB_NAME = "GraphingCalculatorDB";
+      const DB_VERSION = 1;
+      const STORE_NAME = "rom_store";
+      const ROM_KEY = "calculator_os_state";
+
+      function openRomDB() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+              db.createObjectStore(STORE_NAME);
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function getStoredRom() {
+        try {
+          const db = await openRomDB();
+          return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(ROM_KEY);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+          });
+        } catch (e) {
+          return null;
+        }
+      }
+
+      async function saveStoredRom(data) {
+        const db = await openRomDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          const store = tx.objectStore(STORE_NAME);
+          const req = store.put(data, ROM_KEY);
+          req.onsuccess = () => resolve(true);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function clearStoredRom() {
+        try {
+          const db = await openRomDB();
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          tx.objectStore(STORE_NAME).delete(ROM_KEY);
+        } catch (e) {}
+      }
+
+      function showRomModal() {
+        const modal = from_id("rom_modal");
+        const cancelBtn = from_id("rom_cancel_btn");
+        if (cancelBtn) {
+          cancelBtn.style.display = calc ? "inline-block" : "none";
+        }
+        if (modal) modal.classList.add("active");
+      }
+
+      function hideRomModal() {
+        const modal = from_id("rom_modal");
+        if (modal) modal.classList.remove("active");
+      }
+
+      function promptRomUpload() {
+        showRomModal();
+      }
+
+      async function handleRomFile(file) {
+        if (!file) return;
+        showToast("Loading ROM...");
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const content = e.target.result;
+            await saveStoredRom(content);
+            showToast("ROM saved locally!");
+            hideRomModal();
+            if (calc) {
+              window.location.reload();
+            } else {
+              bootCalculatorWithRom(content);
+            }
+          } catch (err) {
+            alert("Failed to save ROM: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function setupDragAndDrop() {
+        const dropZone = from_id("drop_zone");
+        const fileInput = from_id("rom_file_input");
+        if (!dropZone || !fileInput) return;
+
+        fileInput.addEventListener("change", (e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleRomFile(e.target.files[0]);
+          }
+        });
+
+        ["dragenter", "dragover"].forEach((evt) => {
+          dropZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add("dragover");
+          });
+        });
+
+        ["dragleave", "drop"].forEach((evt) => {
+          dropZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove("dragover");
+          });
+        });
+
+        dropZone.addEventListener("drop", (e) => {
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleRomFile(e.dataTransfer.files[0]);
+          }
+        });
+      }
+
+      async function checkServerFile(url) {
+        try {
+          const res = await fetch(url, { method: "HEAD" });
+          return res.ok;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function isCalcReady() {
+        return Boolean(
+          calc &&
+          calc.pa &&
+          calc.pa.La &&
+          calc.pa.nb &&
+          calc.pa.mb &&
+          calc.pa.memory &&
+          calc.pa.memory.Sa
+        );
+      }
+
+      function tickCpu(count) {
+        for (let i = 0; i < count; i++) {
+          if (calc.pa && calc.pa.nb && typeof calc.pa.nb.Ll === "number") {
+            calc.pa.nb.Ll -= 5;
+          }
+          calc.Fj();
+        }
+      }
+
+      function flushPendingKeys() {
+        if (!isCalcReady()) return;
+        const la = calc.pa.La;
+        while (la.Zc.length > 0) {
+          const item = la.Zc.shift();
+          if (item.zg === 1) {
+            if (la.jg !== undefined) la.sk(la.jg);
+            la.Um(item.jd);
+            la.jg = item.jd;
+            tickCpu(10);
+          } else if (item.zg === 2) {
+            if (la.jg === item.jd) la.jg = undefined;
+            la.sk(item.jd);
+            tickCpu(10);
+          }
+        }
+        if (la.jg !== undefined) {
+          la.sk(la.jg);
+          la.jg = undefined;
+          tickCpu(10);
+        }
+      }
+
+      function captureFastState() {
+        if (!isCalcReady()) return null;
+        return {
+          cpu_registers: calc.pa.nb.Wk(),
+          asic_state: calc.pa.rd(),
+          asic_ram: calc.pa.memory.Sa.slice(13631488, 14047232)
+        };
+      }
+
+      function restoreFastState(snap) {
+        if (!snap || !isCalcReady()) return false;
+        flushPendingKeys();
+        const la = calc.pa.La;
+        if (la.jg !== undefined) {
+          la.sk(la.jg);
+          la.jg = undefined;
+        }
+        calc.pa.reset(la, calc.pa.display, snap.asic_state);
+        calc.pa.memory.Sa.set(snap.asic_ram, 13631488);
+        calc.pa.nb.reset(snap.cpu_registers);
+        tickCpu(25);
+        if (calc.pa.mb && typeof calc.pa.mb.wj === "function") {
+          calc.pa.mb.wj();
+          calc.pa.mb.sf();
+        }
+        return true;
+      }
+
+      function pushUndoSnapshot() {
+        if (isRunningMacro) return;
+        const snap = captureFastState();
+        if (!snap) return;
+        undoStack.push(snap);
+        if (undoStack.length > MAX_UNDO_STEPS) {
+          undoStack.shift();
+        }
+        redoStack.length = 0;
+        updateUndoButtons();
+      }
+
+      function performUndo() {
+        if (undoStack.length === 0 || !isCalcReady()) return;
+        const currentSnap = captureFastState();
+        if (currentSnap) {
+          redoStack.push(currentSnap);
+        }
+        const prevSnap = undoStack.pop();
+        restoreFastState(prevSnap);
+        updateUndoButtons();
+        showToast("Undo");
+        focusCalculator();
+      }
+
+      function performRedo() {
+        if (redoStack.length === 0 || !isCalcReady()) return;
+        const currentSnap = captureFastState();
+        if (currentSnap) {
+          undoStack.push(currentSnap);
+        }
+        const nextSnap = redoStack.pop();
+        restoreFastState(nextSnap);
+        updateUndoButtons();
+        showToast("Redo");
+        focusCalculator();
+      }
+
+      function patchRomInMemory() {
+        if (!calc || !calc.pa || !calc.pa.memory || !calc.pa.memory.Sa) return;
+        const sa = calc.pa.memory.Sa;
+        const targetBytes = [84, 73, 45, 56, 52, 32, 80, 108, 117, 115, 32, 67, 69];
+        let match = true;
+        for (let i = 0; i < targetBytes.length; i++) {
+          if (sa[650722 + i] !== targetBytes[i]) {
+            match = false;
+            break;
+          }
+        }
+        if (match) {
+          const repBytes = [71, 114, 97, 112, 104, 105, 110, 103, 32, 67, 97, 108, 99, 0];
+          for (let i = 0; i < repBytes.length; i++) {
+            sa[650722 + i] = repBytes[i];
+          }
+        }
+      }
+
+      function dismissInitialAboutScreen() {
+        if (!isCalcReady()) return;
+        if (calc.pa.memory && calc.pa.memory.Sa) {
+          calc.pa.memory.Sa.fill(255, 13893632, 14047232);
+        }
+        patchRomInMemory();
+        const la = calc.pa.La;
+        // CLEAR key is index 19 (CLEAR_NONE_NONE)
+        la.Um(19);
+        tickCpu(35);
+        la.sk(19);
+        tickCpu(45);
+        if (calc.pa.mb && typeof calc.pa.mb.sf === "function") {
+          calc.pa.mb.sf();
+        }
+        setTimeout(() => {
+          document.body.classList.remove("calc-booting");
+        }, 60);
+      }
+
+      function setupEmulatorHooks() {
+        const checkReadyInterval = setInterval(() => {
+          if (!calc || !calc.pa || !calc.pa.La) return;
+          clearInterval(checkReadyInterval);
+
+          patchRomInMemory();
+
+          // Wipe framebuffer immediately
+          if (calc.pa.memory && calc.pa.memory.Sa) {
+            calc.pa.memory.Sa.fill(255, 13893632, 14047232);
+          }
+          // Auto-dismiss the initial frozen About screen so the user lands on the clean calculation screen
+          dismissInitialAboutScreen();
+
+          const la = calc.pa.La;
+          const origUm = la.Um.bind(la);
+          la.Um = function (code) {
+            pushUndoSnapshot();
+            return origUm(code);
+          };
+
+          const origSk = la.sk.bind(la);
+          la.sk = function (code) {
+            return origSk(code);
+          };
+        }, 100);
+      }
+
+      function insertSecondComboKey(secondKeyTargetCode) {
+        if (!isCalcReady()) return;
+        isRunningMacro = true;
+        pushUndoSnapshot();
+
+        const la = calc.pa.La;
+        flushPendingKeys();
+
+        // If 2nd is not active, press 2nd (code 9)
+        if (!calc.is2ndOn()) {
+          la.Um(9);
+          tickCpu(25);
+          la.sk(9);
+          tickCpu(25);
+          calc.pa.mb.sf();
+        }
+
+        // Press target key
+        la.Um(secondKeyTargetCode);
+        tickCpu(25);
+        la.sk(secondKeyTargetCode);
+        tickCpu(35);
+        calc.pa.mb.sf();
+
+        isRunningMacro = false;
+        focusCalculator();
+      }
+
+      function performBackspace() {
+        if (!isCalcReady()) return;
+        isRunningMacro = true;
+        pushUndoSnapshot();
+
+        const la = calc.pa.La;
+        flushPendingKeys();
+
+        // Inspect edit buffer pointers in eZ80 RAM
+        // editTop: 0xD02437 (13640759), editCursor: 0xD0243A (13640762)
+        const mem = calc.pa.memory.Sa;
+        const editTop = mem[13640759] | (mem[13640760] << 8) | (mem[13640761] << 16);
+        const editCursor = mem[13640762] | (mem[13640763] << 8) | (mem[13640764] << 16);
+
+        if (editCursor > editTop && editTop > 0xd00000) {
+          // Inside an active line with characters to the left of cursor:
+          // Left Arrow (idx 2) then DEL (idx 11)
+          la.Um(2);
+          tickCpu(25);
+          la.sk(2);
+          tickCpu(25);
+
+          la.Um(11);
+          tickCpu(25);
+          la.sk(11);
+          tickCpu(35);
+          calc.pa.mb.sf();
+        } else {
+          // Outside active line or at start: DEL (idx 11)
+          la.Um(11);
+          tickCpu(25);
+          la.sk(11);
+          tickCpu(35);
+          calc.pa.mb.sf();
+        }
+
+        isRunningMacro = false;
+        focusCalculator();
+      }
+
+      function performClearLine() {
+        if (!isCalcReady()) return;
+        isRunningMacro = true;
+        pushUndoSnapshot();
+
+        const la = calc.pa.La;
+        flushPendingKeys();
+
+        // CLEAR key is index 19 (CLEAR_NONE_NONE)
+        la.Um(19);
+        tickCpu(25);
+        la.sk(19);
+        tickCpu(35);
+        calc.pa.mb.sf();
+
+        isRunningMacro = false;
+        focusCalculator();
+      }
+
+      function handleKeyDown(e) {
+        if (!isCalcReady()) return;
+
+        // Esc: Clear line (CLEAR key)
+        if (e.key === "Escape" || e.keyCode === 27) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          performClearLine();
+          return;
+        }
+
+        // Undo: Ctrl+Z or Cmd+Z (without shift)
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z" || e.keyCode === 90)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          performUndo();
+          return;
+        }
+
+        // Redo: Ctrl+Y or Ctrl+Shift+Z / Cmd+Shift+Z
+        if (
+          ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "y" || e.key === "Y" || e.keyCode === 89)) ||
+          ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "z" || e.key === "Z" || e.keyCode === 90))
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          performRedo();
+          return;
+        }
+
+        // Curly braces: { -> 2nd + ( (code 27), } -> 2nd + ) (code 28)
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "{" || e.key === "}")) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          insertSecondComboKey(e.key === "{" ? 27 : 28);
+          return;
+        }
+
+        // Square brackets: [ -> 2nd + * (code 31), ] -> 2nd + - (code 36)
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "[" || e.key === "]")) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          insertSecondComboKey(e.key === "[" ? 31 : 36);
+          return;
+        }
+
+        // Backspace: delete only the last character instead of clearing the whole line
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "Backspace" || e.keyCode === 8)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          performBackspace();
+          return;
+        }
+
+        // If calculatorDiv isn't focused yet, focus it and forward the key event
+        if (document.activeElement !== calc_div && calc_div && typeof calc_div.onkeydown === "function") {
+          focusCalculator();
+          calc_div.onkeydown(e);
+        }
+      }
+
+      function handleKeyUp(e) {
+        if (!isCalcReady()) return;
+        if (document.activeElement !== calc_div && calc_div && typeof calc_div.onkeyup === "function") {
+          calc_div.onkeyup(e);
+        }
+      }
+
+      window.addEventListener("keydown", handleKeyDown, true);
+      window.addEventListener("keyup", handleKeyUp, true);
+
+      function bootCalculatorWithRom(romData) {
+        let blob;
+        if (romData instanceof Blob) {
+          blob = romData;
+        } else {
+          blob = new Blob([romData], { type: "application/json" });
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        const rom_url = blobUrl + "#.h84statej";
+
+        let default_faceplate = calc_faceplate.getAttribute("data-url");
+        let faceplate_url = create_blob(calc_faceplate.innerHTML) || default_faceplate;
+        faceplate_url += "#.svg";
+
+        document.body.classList.add("calc-booting");
+        const CalcEngine = window.GraphCalcEngine;
+        calc = new CalcEngine({ ROMLocation: rom_url, FaceplateLocation: faceplate_url });
+        setupEmulatorHooks();
+
+        setTimeout(updateZoom, 100);
+        setTimeout(updateZoom, 500);
+      }
+
+      async function main() {
+        setupDragAndDrop();
+
+        // 1. Check if a local ROM file exists on the server (works immediately for local dev)
+        const default_rom = calc_rom.getAttribute("data-url");
+        if (default_rom && await checkServerFile(default_rom)) {
+          let rom_url = default_rom + "#.h84statej";
+          let default_faceplate = calc_faceplate.getAttribute("data-url");
+          let faceplate_url = default_faceplate + "#.svg";
+          document.body.classList.add("calc-booting");
+        const CalcEngine = window.GraphCalcEngine;
+        calc = new CalcEngine({ ROMLocation: rom_url, FaceplateLocation: faceplate_url });
+          setupEmulatorHooks();
+          setTimeout(updateZoom, 100);
+          setTimeout(updateZoom, 500);
+          return;
+        }
+
+        // 2. Check if user has previously uploaded a ROM stored in browser IndexedDB
+        const storedRom = await getStoredRom();
+        if (storedRom) {
+          bootCalculatorWithRom(storedRom);
+          return;
+        }
+
+        // 3. Otherwise, show the ROM upload modal
+        showRomModal();
+      }
+
+      main();
+    </script>
+  </body>
+</html>

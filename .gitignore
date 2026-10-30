@@ -1,0 +1,14 @@
+*.pdf
+*transcript*
+generate_transcript_pdf.py
+scratch/
+
+# Calculator ROMs and OS state dumps (never commit proprietary firmware)
+*.h84statej
+*.h84state
+*.rom
+*.8eu
+*.8cu
+assets/*.h84statej
+assets/*.h84state
+assets/*.rom
